@@ -1,76 +1,66 @@
-import express from 'express';
-import cors from 'cors';
-import { createServer } from 'node:http';
+
 import { WebSocketServer } from 'ws';
 import fs from 'fs';
 
-const app = express();
-app.use(cors());
+const PORT = process.env.PORT || 3000;
+const VOTOS_FILE = 'votos.json';
 
-const server = createServer(app);
-const wss = new WebSocketServer({ server });
-
-// 👈 1. Variable para almacenar los votos en memoria
-let votos = {};
-
-// 👈 2. Leemos el estado inicial de los votos desde el archivo JSON al iniciar
-try {
-  const data = fs.readFileSync('votos.json', 'utf8');
-  votos = JSON.parse(data);
-  console.log('Estado inicial de votos cargado desde votos.json');
-} catch (err) {
-  // Si el archivo no existe o hay un error, empezamos con un objeto vacío
-  console.error('No se pudo leer votos.json, se iniciará con un objeto vacío.', err.message);
+// Initialize votes
+let votos = [0, 0, 0, 0];
+if (fs.existsSync(VOTOS_FILE)) {
+  try {
+    const data = fs.readFileSync(VOTOS_FILE, 'utf8');
+    votos = JSON.parse(data);
+  } catch (err) {
+    console.error('Error reading votos.json:', err);
+  }
+} else {
+  fs.writeFileSync(VOTOS_FILE, JSON.stringify(votos));
 }
 
-// Función para difundir (broadcast) un mensaje a todos los clientes conectados
-function broadcast(data) {
-  const message = JSON.stringify(data);
-  console.log("Enviando actualización a todos los clientes:", message);
-  wss.clients.forEach((client) => {
-    if (client.readyState === client.OPEN) {
-      client.send(message);
-    }
-  });
-}
+const wss = new WebSocketServer({ port: PORT });
 
-// Evento que se dispara cuando un cliente se conecta
-wss.on('connection', (ws) => {
-  console.log('Cliente conectado al WebSocket');
+console.log(`WebSocket server started on port ${PORT}`);
 
-  // 👈 3. Enviamos el estado actual de los votos al nuevo cliente
-  // Ahora la variable 'votos' ya tiene los datos cargados.
+wss.on('connection', ws => {
+  console.log('Client connected');
+
+  // Send the initial voting data
   ws.send(JSON.stringify(votos));
 
-  // Evento que se dispara cuando se recibe un mensaje de un cliente
-  ws.on('message', (message) => {
-    const votedOption = message.toString();
-    console.log("Llega una votación para:", votedOption);
+  ws.on('message', message => {
+    try {
+      console.log("missatge rebut "+message)
+      
+      const parsedMessage = JSON.parse(message);
+      if (parsedMessage.hasOwnProperty('vote')) {
+        const voteIndex = parsedMessage.vote;
+        if (voteIndex >= 0 && voteIndex < votos.length) {
+          votos[voteIndex]++;
+          console.log(`Vote received for option ${voteIndex + 1}. New votes: ${votos}`);
 
-    // Actualizamos el recuento de votos si la opción existe
-    if (votos.hasOwnProperty(votedOption)) {
-      votos[votedOption]++;
-    } else {
-      console.warn(`La opción "${votedOption}" no existe en votos.json`);
-      return;
-    }
+          // Save votes to file
+          fs.writeFileSync(VOTOS_FILE, JSON.stringify(votos));
 
-    // Guardamos el JSON actualizado
-    fs.writeFile('votos.json', JSON.stringify(votos, null, 2), (err) => {
-      if (err) {
-        console.error("Error al escribir en el archivo:", err);
-        return;
+          // Broadcast the updated results to all connected clients
+          const updateMessage = JSON.stringify(votos);
+          wss.clients.forEach(client => {
+            if (client.readyState === client.OPEN) {
+              client.send(updateMessage);
+            }
+          });
+        }
       }
-      // Emitimos el JSON actualizado a TODOS los clientes
-      broadcast(votos);
-    });
+    } catch (error) {
+      console.error('Failed to parse message or process vote:', error);
+    }
   });
 
   ws.on('close', () => {
-    console.log('Cliente desconectado');
+    console.log('Client disconnected');
   });
-});
 
-server.listen(3999, () => {
-  console.log('Servidor corriendo en http://localhost:3999');
+  ws.on('error', error => {
+    console.error('WebSocket error:', error);
+  });
 });
