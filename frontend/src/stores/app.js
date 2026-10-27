@@ -6,16 +6,15 @@ export const useAppStore = defineStore('app', () => {
   const loginInfo = ref({
     loggedIn: false,
     username: '',
-    image: '',
   })
-  const votos = ref([1, 23, 0, 0]) // Un array per a 4 opcions
+  const votos = ref([0, 0, 0, 0]) // Un array per a 4 opcions
 
   // Getters (com a computed properties)
   const isLoggedIn = computed(() => loginInfo.value.loggedIn)
 
   // Actions (com a funcions)
-  function setLoginInfo({ loggedIn, username, image }) {
-    loginInfo.value = { loggedIn, username, image }
+  function setLoginInfo({ loggedIn, username }) {
+    loginInfo.value = { loggedIn, username }
   }
 
   function setVotos(nousVots) {

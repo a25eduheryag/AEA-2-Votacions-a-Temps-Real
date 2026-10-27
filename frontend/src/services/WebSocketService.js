@@ -18,7 +18,6 @@ class WebSocketService {
     this.socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
       // Assuming the server sends the array of votes directly
-      console.log("votos inicializados")
       this.store.setVotos(data);
     };
 
@@ -36,7 +35,7 @@ class WebSocketService {
   sendVote(optionIndex) {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       // The message format will depend on the backend implementation
-      this.socket.send(optionIndex);
+      this.socket.send(JSON.stringify({ vote: optionIndex }));
     } else {
       console.error('WebSocket is not connected.');
     }
